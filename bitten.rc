@@ -11,7 +11,7 @@ BEGIN
       VALUE "FileVersion", "1.0"
       VALUE "InternalName", "Bittens adventure"
       VALUE "LegalCopyright", "bitten1up (Sean Tipton) 2022"
-      VALUE "OriginalFilename", "bitten-adventure.exe"
+      VALUE "OriginalFilename", "lsdl2bitten"
       VALUE "ProductName", "bitten's adventure'"
       VALUE "ProductVersion", "alpha 1"
     END
