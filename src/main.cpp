@@ -21,509 +21,239 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-/*
-note from dev DONT EVER BASE YOUR GAME OFF OF PONG CODE IT IS A PAIN TO WORK WITH now thanks sfml for the pong example
-*/
-////////////////////////////////////////////////////////////
-// Headers
-////////////////////////////////////////////////////////////
-#include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
-#include <cmath>
-#include <ctime>
-#include <cstdlib>
-#include <iostream>
+
+//Using SDL, standard IO, and strings
+#include <SDL2/SDL.h>
+#include <stdio.h>
 #include <string>
-#include <fstream>
 #include "bittendef.h"
-#include "version.h"
-#include <chrono>
-#include <thread>
-using namespace std;
-using namespace std::this_thread;     // sleep_for, sleep_until
-using namespace std::chrono_literals; // ns, us, ms, s, h, etc.
-using std::chrono::system_clock;
-using namespace std::chrono;
-////////////////////////////////////////////////////////////
-/// Entry point of application
-///
-/// \return Application exit code
-///
-////////////////////////////////////////////////////////////
-class options{
-    public: 
-        bool fullscreen = true;
-        string savedata = "null lol";
-        bool bittendev = true;
-        int whatthehell = 1;
-};
-int main()
+//Screen dimension constants
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
+
+//Key press surfaces constants
+enum KeyPressSurfaces
 {
-    std::srand(static_cast<unsigned int>(std::time(NULL)));
-    std::cout << "Bitten's Adventure\nVersion " << version << std::endl;
-    options settings;
-    std::cout << settings.fullscreen << std::endl;
-    bool battle = false;
-    bool up = false;
-    bool down = true;
-    bool left = true;
-    bool right = false;
-    bool aniright = true;
-    #ifdef debug
-    std::cout << "DEBUG VERSION" << std::endl;
-    #endif
-    #ifdef battleTest
-    std::cout << "BATTLE TEST" << std::endl;
-    battle = true;
-    #endif
-    // Define some constants
-    const float pi = 3.14159f;
-    sf::Vector2f paddleSize(25, 25);
-    float ballRadius = 10.f;
-    remove( "log.txt" );
-    // define map loading (unused at the moment for the prototype)
-    // ofstream map;
-    // Create the window of the application
-    sf::VideoMode desktopMode = sf::VideoMode::getDesktopMode();
-    sf::RenderWindow window(sf::VideoMode(  desktopMode.width,
-                                            desktopMode.height,
-                                            desktopMode.bitsPerPixel),
-                            "Bitten's adventure",
-                            sf::Style::Fullscreen);
-    
-    window.setVerticalSyncEnabled(true);
-    window.setActive();
-    int gameWidth = window.getSize().x;
-    int gameHeight = window.getSize().y;
-    sf::Image image;
-    if (!image.loadFromFile("assets/bitten.png"))
-    {
-    // Error handling...
-        return EXIT_FAILURE;
-    }
-    window.setIcon(image.getSize().x, image.getSize().y, image.getPixelsPtr());
-    // Load and run the music
-    sf::Music music;
-    // Open it from an audio file
-    if (!music.openFromFile("assets/bitten.wav")) // default location of file if downloaded
-    {
-        if (!music.openFromFile("~/.bitten/assets/bitten.wav")) // linux/macos compatibity for assets
+	KEY_PRESS_SURFACE_DEFAULT,
+	KEY_PRESS_SURFACE_UP,
+	KEY_PRESS_SURFACE_DOWN,
+	KEY_PRESS_SURFACE_LEFT,
+	KEY_PRESS_SURFACE_RIGHT,
+	KEY_PRESS_SURFACE_TOTAL
+};
+
+//Starts up SDL and creates window
+bool init();
+
+//Loads media
+bool loadMedia();
+
+//Frees media and shuts down SDL
+void close();
+
+//Loads individual image
+SDL_Surface* loadSurface( std::string path );
+
+//The window we'll be rendering to
+SDL_Window* gWindow = NULL;
+	
+//The surface contained by the window
+SDL_Surface* gScreenSurface = NULL;
+
+//The images that correspond to a keypress
+SDL_Surface* gKeyPressSurfaces[ KEY_PRESS_SURFACE_TOTAL ];
+
+//Current displayed image
+SDL_Surface* gCurrentSurface = NULL;
+
+bool init()
+{
+	//Initialization flag
+	bool success = true;
+
+	//Initialize SDL
+	if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
 	{
-		return EXIT_FAILURE; // crash
+		printf( "SDL could not initialize! SDL Error: %s\n", SDL_GetError() );
+		success = false;
 	}
-    }
-    // Change some parameters
-    music.setPosition(0, 1, 10); // change its 3D position
-    music.setPitch(1);           // increase the pitch
-    music.setVolume(50);         // reduce the volume
-    music.setLoop(true);         // make it loop
-    // Play it
-    music.play();
-    // Load the sounds used in the game
-    sf::SoundBuffer ballSoundBuffer;
-    if (!ballSoundBuffer.loadFromFile("assets/ball.wav")){
-	if (!ballSoundBuffer.loadFromFile("~/.bitten/assets/ball.wav")){
-        	return EXIT_FAILURE;
-	}
-    }
-    // load our savedata
-    ifstream savedata("bitten.sav", ios::in); // open the savefile
-    if (!savedata.is_open()){
-        std::ofstream outfile ("bitten.sav");
-        outfile << "[bitten-engine-save-file]";
-        outfile.close();
-    }
-    // print our savefile data
-    savedata >> settings.savedata; // writes the information from the file to a buffer for later use
-    savedata.close();
-    std::cout << settings.savedata << endl;
-    sf::Sound ballSound(ballSoundBuffer);
-    // Create the left paddle
-    sf::RectangleShape leftPaddle;
-    leftPaddle.setSize(paddleSize - sf::Vector2f(3, 3));
-    leftPaddle.setOutlineThickness(3);
-    leftPaddle.setOutlineColor(sf::Color::Black);
-    leftPaddle.setFillColor(sf::Color(100, 100, 200));
-    leftPaddle.setOrigin(paddleSize / 2.f);
-    sf::RectangleShape crusor;
-    crusor.setSize(paddleSize - sf::Vector2f(3, 3));
-    crusor.setOutlineThickness(3);
-    crusor.setOutlineColor(sf::Color::Black);
-    crusor.setFillColor(sf::Color(100, 100, 200));
-    crusor.setOrigin(paddleSize / 2.f);
-    int wait = 1000;
-
-    // Create the right paddle
-    sf::RectangleShape rightPaddle;
-    rightPaddle.setSize(paddleSize - sf::Vector2f(3, 3));
-    rightPaddle.setOutlineThickness(3);
-    rightPaddle.setOutlineColor(sf::Color::Black);
-    rightPaddle.setFillColor(sf::Color(200, 100, 100));
-    rightPaddle.setOrigin(paddleSize / 2.f);
-    freopen( "log.txt", "w", stdout );
-    // Create the ball
-    sf::CircleShape ball;
-    ball.setRadius(ballRadius - 3);
-    ball.setOutlineThickness(3);
-    ball.setOutlineColor(sf::Color::Black);
-    ball.setFillColor(sf::Color::White);
-    ball.setOrigin(ballRadius / 2, ballRadius / 2);
-    int enemyhp = 100;
-
-    // Load the text font
-    sf::Font font;
-    if (!font.loadFromFile("assets/PressStart2P-Regular.ttf"))
-    {
-        if (!font.loadFromFile("~/.bitten/assets/PressStart2P-Regular.ttf")) // for the nix
+	else
 	{
-		return EXIT_FAILURE;
+		//Create window
+		gWindow = SDL_CreateWindow( "bitten's adventure", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+		if( gWindow == NULL )
+		{
+			printf( "Window could not be created! SDL Error: %s\n", SDL_GetError() );
+			success = false;
+		}
+		else
+		{
+			//Get window surface
+			gScreenSurface = SDL_GetWindowSurface( gWindow );
+		}
 	}
-    }
-    // Initialize the pause message
-    sf::Text pauseMessage;
-    pauseMessage.setFont(font);
-    pauseMessage.setCharacterSize(20);
-    pauseMessage.setPosition(170.f, 150.f);
-    pauseMessage.setFillColor(sf::Color::White);
-    pauseMessage.setString("Bitten's Adventure\n\n\nPRESS START\n\n\n\n\n\nVERSION 0.001");
-    sf::Text copyright;
-    copyright.setFont(font);
-    copyright.setCharacterSize(20);
-    copyright.setPosition(gameWidth-20, gameHeight-20);
-    copyright.setFillColor(sf::Color::White);
-    copyright.setString("©bitten1up(sean tipton) 2022");
-    // Initilize the opponet text for battles
-    sf::Text battleText;
-    battleText.setFont(font);
-    battleText.setCharacterSize(30);
-    battleText.setPosition(170.f, 400.f);
-    battleText.setFillColor(sf::Color::White);
-    battleText.setString("Test Battle");
-    // Define the paddles properties
-    sf::Clock AITimer;
-    const sf::Time AITime   = sf::seconds(0.1f);
-    const double paddleSpeed = 400.f;
-    float rightPaddleSpeed  = 0.f;
-    const double ballSpeed   = 400.f;
-    float ballAngle         = 0.f; // to be changed later
 
-    sf::Clock clock;
-    bool isPlaying = false;
-    while (window.isOpen())
-    {
-        // Handle events
-        sf::Event event;
-        while (window.pollEvent(event))
-        {
-                // Window closed or escape key pressed: exit
-            if ((event.type == sf::Event::Closed) ||
-               ((event.type == sf::Event::KeyPressed) && (event.key.code == sf::Keyboard::Escape)))
-            {
-                window.close();
-                break;
-                isPlaying = true;
-            }
-            
-	    #ifdef battleTest
-	    leftPaddle.setPosition(10 + paddleSize.x / 2, gameHeight / 2);
-            rightPaddle.setPosition(gameWidth - 10 - paddleSize.x / 2, gameHeight / 2);
-            ball.setPosition(gameWidth / 2, gameHeight / 2);
-	    #endif
-            // enter key pressed: play
-            if ((event.type == sf::Event::KeyPressed) && (event.key.code == sf::Keyboard::Enter))
-            {
-                if (!isPlaying)
-                {
-                    // (re)start the game
-                    isPlaying = true;
-                    clock.restart();
+	return success;
+}
 
-                    // Reset the position of the paddles and ball
-                    leftPaddle.setPosition(10 + paddleSize.x / 2, gameHeight / 2);
-                    rightPaddle.setPosition(gameWidth - 10 - paddleSize.x / 2, gameHeight / 2);
-                    ball.setPosition(gameWidth / 2, gameHeight / 2);
+bool loadMedia()
+{
+	//Loading success flag
+	bool success = true;
 
-                    // Reset the ball angle
-                    do
-                    {
-                        // Make sure the ball initial angle is not too much vertical
-                        ballAngle = (std::rand() % 360) * 2 * pi / 360;
-                    }
-                    while (std::abs(std::cos(ballAngle)) < 0.7f);
-                }
-            }
-        }
+	//Load default surface
+	gKeyPressSurfaces[ KEY_PRESS_SURFACE_DEFAULT ] = loadSurface( "assets/breathing.bmp" );
+	if( gKeyPressSurfaces[ KEY_PRESS_SURFACE_DEFAULT ] == NULL )
+	{
+		printf( "Failed to load default image!\n" );
+		success = false;
+	}
 
-        if (isPlaying)
-        {
-            float deltaTime = clock.restart().asSeconds();
-            if(!battle){ // revoke player movement in battles, we will using a different object for menu and we don't want the player moving in the menus, if it is not an battle you can move normaly
-                // Move the player's paddle
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) &&
-                   (leftPaddle.getPosition().y - paddleSize.y / 2 > 5.f))
-                {
-                    leftPaddle.move(0.f, -paddleSpeed * deltaTime);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down) &&
-                   (leftPaddle.getPosition().y + paddleSize.y / 2 < gameHeight - 5.f))
-                {
-                    leftPaddle.move(0.f, paddleSpeed * deltaTime);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left) &&
-                   (leftPaddle.getPosition().x + paddleSize.x / 2 > 5.f))
-                {
-                    leftPaddle.move(-paddleSpeed * deltaTime, 0.f);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right) &&
-		        (leftPaddle.getPosition().x + paddleSize.x / 2 < gameWidth - 5.f))
-                {
-                    leftPaddle.move(paddleSpeed * deltaTime, 0.f);
-                }
-             }
-             // the battle mode, i probly should have a bool for this and have it in a different if statement but this will work for now
-	        else {
-                battleText.setString("A wild box appered and the circle is not friendly anymore. 0_0");
-                
-                // Move the battle crusor
-                if (enemyhp == 0){
-                    battleText.setString("You won");
-                    while(!sf::Keyboard::isKeyPressed(sf::Keyboard::X)){
-                    }
-                    while(sf::Keyboard::isKeyPressed(sf::Keyboard::X)){
-                    }
-                    battle=false;
-                }
-                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
-                {
-                    if (down){
-                        std::cout << "move up" << std::endl;
-                        up = true;
-                        down = false;
-                        crusor.setPosition(crusor.getPosition().x, gameHeight - paddleSize.y - 100); 
-                    }
-                    else {
-                        std::cout << "can't move up" << std::endl;
-                    }
-                }
-                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
-                {
-                    if (up){
-                        std::cout << "move down" << std::endl;
-                        up = false;
-                        down = true;
-                        crusor.setPosition(crusor.getPosition().x, gameHeight - paddleSize.y);
-                    }
-                    else {
-                        std::cout << "can't move down" << std::endl;
-                    }
-                }
-                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
-                {
-                    if (right){
-                        std::cout << "move down" << std::endl;
-                        left = true;
-                        right = false;
-                        crusor.setPosition(100 + paddleSize.x / 2, crusor.getPosition().y);
-                    }
-                    else {
-                        std::cout << "can't move left" << std::endl;
-                    }
-                }
-                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
-                {
-                    if (left){
-                        std::cout << "move down" << std::endl;
-                        left = false;
-                        right = true;
-                        crusor.setPosition(gameWidth - paddleSize.x - 50, crusor.getPosition().y);
-                    }
-                    else {
-                        std::cout << "can't move right" << std::endl;
-                    }
-                }
-                else if (sf::Keyboard::isKeyPressed(sf::Keyboard::X)){
-                    if (down && left){
-                        enemyhp = enemyhp - 10;
-                        isPlaying = false;
-                        aniright = true;
-                        wait=gameWidth-1000;
-                    }
-                }
-             }
+	//Load up surface
+	gKeyPressSurfaces[ KEY_PRESS_SURFACE_UP ] = loadSurface( "assets/future.bmp");
+	if( gKeyPressSurfaces[ KEY_PRESS_SURFACE_UP ] == NULL )
+	{
+		printf( "Failed to load up image!\n" );
+		success = false;
+	}
 
-            // Move the computer's paddle
-            if (((rightPaddleSpeed < 0.f) && (rightPaddle.getPosition().y - paddleSize.y / 2 > 5.f)) ||
-                ((rightPaddleSpeed > 0.f) && (rightPaddle.getPosition().y + paddleSize.y / 2 < gameHeight - 5.f)))
-            {
-                rightPaddle.move(0.f, rightPaddleSpeed * deltaTime);
-            }
+	//Load down surface
+	gKeyPressSurfaces[ KEY_PRESS_SURFACE_DOWN ] = loadSurface( "assets/future.bmp" );
+	if( gKeyPressSurfaces[ KEY_PRESS_SURFACE_DOWN ] == NULL )
+	{
+		printf( "Failed to load down image!\n" );
+		success = false;
+	}
 
-            // Update the computer's paddle direction according to the ball position
-            if (AITimer.getElapsedTime() > AITime)
-            {
-                AITimer.restart();
-                if (ball.getPosition().y + ballRadius > rightPaddle.getPosition().y + paddleSize.y / 4)
-                    rightPaddleSpeed = paddleSpeed;
-                else if (ball.getPosition().y - ballRadius < rightPaddle.getPosition().y - paddleSize.y / 4)
-                    rightPaddleSpeed = -paddleSpeed;
-                else
-                    rightPaddleSpeed = 0.f;
-            }
+	//Load left surface
+	gKeyPressSurfaces[ KEY_PRESS_SURFACE_LEFT ] = loadSurface( "assets/future.bmp" );
+	if( gKeyPressSurfaces[ KEY_PRESS_SURFACE_LEFT ] == NULL )
+	{
+		printf( "Failed to load left image!\n" );
+		success = false;
+	}
 
-            // Move the ball
-//            float factor = ballSpeed * deltaTime;
-//            ball.move(std::cos(ballAngle) * factor, std::sin(ballAngle) * factor);
+	//Load right surface
+	gKeyPressSurfaces[ KEY_PRESS_SURFACE_RIGHT ] = loadSurface( "assets/future.bmp" );
+	if( gKeyPressSurfaces[ KEY_PRESS_SURFACE_RIGHT ] == NULL )
+	{
+		printf( "Failed to load right image!\n" );
+		success = false;
+	}
 
-            // Check collisions between the ball and the screen
-            if (ball.getPosition().x - ballRadius < 0.f)
-            {
-                isPlaying = false;
-                pauseMessage.setString("You lost!\nPress enter to restart or\nescape to exit");
-            }
-            if (ball.getPosition().x + ballRadius > gameWidth)
-            {
-                
-                leftPaddle.setPosition(10.f, 50.f);
-                rightPaddle.setPosition(gameWidth - 10 - paddleSize.x / 2, gameHeight / 2);
-                ball.setPosition(gameWidth / 5, gameHeight / 5);
-		        battle = true;
-			    battleText.setCharacterSize(10);
-		        battleText.setString("A wild box appered and the circle is not friendly anymore. 0_0");
-                leftPaddle.setPosition(10 + paddleSize.x / 2, gameHeight / 2);
-                crusor.setPosition(100 + paddleSize.x / 2, gameHeight - paddleSize.y);
-                crusor.rotate(45);
-            }
-            if (ball.getPosition().y - ballRadius < 0.f)
-            {
-                //ballSound.play();
-                ballAngle = -ballAngle;
-                ball.setPosition(ball.getPosition().y, ballRadius + 0.1f);
-		        leftPaddle.setPosition(1,1);
-            }
-            if (ball.getPosition().y + ballRadius > gameHeight)
-            {
-                //ballSound.play();
-                ballAngle = -ballAngle;
-                ball.setPosition(ball.getPosition().x, gameHeight - ballRadius - 0.1f);
-            }
+	return success;
+}
 
-            // Check the collisions between the ball and the paddles
-            // Left Paddle
-            if (ball.getPosition().x - ballRadius < leftPaddle.getPosition().x + paddleSize.x / 2 &&
-                ball.getPosition().x - ballRadius > leftPaddle.getPosition().x &&
-                ball.getPosition().y + ballRadius >= leftPaddle.getPosition().y - paddleSize.y / 2 &&
-                ball.getPosition().y - ballRadius <= leftPaddle.getPosition().y + paddleSize.y / 2)
-            {
-                if (ball.getPosition().y > leftPaddle.getPosition().y)
-                    ballAngle = pi - ballAngle + (std::rand() % 20) * pi / 180;
-                else
-                    ballAngle = pi - ballAngle - (std::rand() % 20) * pi / 180;
+void close()
+{
+	//Deallocate surfaces
+	for( int i = 0; i < KEY_PRESS_SURFACE_TOTAL; ++i )
+	{
+		SDL_FreeSurface( gKeyPressSurfaces[ i ] );
+		gKeyPressSurfaces[ i ] = NULL;
+	}
 
-                //ballSound.play();
-                ball.setPosition(leftPaddle.getPosition().x + ballRadius + paddleSize.x / 2 + 0.1f, ball.getPosition().y);
-            }
-	    // Right Paddle
-	    #ifndef debug
-            if (ball.getPosition().x + ballRadius > rightPaddle.getPosition().x - paddleSize.x / 2 &&
-                ball.getPosition().x + ballRadius < rightPaddle.getPosition().x &&
-                ball.getPosition().y + ballRadius >= rightPaddle.getPosition().y - paddleSize.y / 4 &&
-                ball.getPosition().y - ballRadius <= rightPaddle.getPosition().y + paddleSize.y / 4)
-            {
-                if (ball.getPosition().y > rightPaddle.getPosition().y)
-                    ballAngle = pi - ballAngle + (std::rand() % 20) * pi / 180;
-                else
-                    ballAngle = pi - ballAngle - (std::rand() % 20) * pi / 180;
+	//Destroy window
+	SDL_DestroyWindow( gWindow );
+	gWindow = NULL;
 
-                //ballSound.play();
-                ball.setPosition(rightPaddle.getPosition().x - ballRadius - paddleSize.x / 2 - 0.1f, ball.getPosition().y);
-            }
-	    #endif
-	    #ifdef debug
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::X)){
-            	battleText.setString("battle");
-                ball.setRadius(ballRadius+3);
-            }
-	    #endif
-	    
-        }
-        //[aha yes workarounds that are stupid in design but work]
-        else if (battle){
-            float deltaTime = clock.restart().asSeconds();
-            
-            std::cout << wait << std::endl;
-            
-            if (aniright){
-                leftPaddle.move(paddleSpeed * deltaTime, 0.f);
-                wait=wait-1;
-                
-                if (wait == 0){
-                    aniright = false;
-                    std::cout << "stop moving right" << std::endl;
-                } 
-            }
-            else if (!aniright){
-                leftPaddle.move(-paddleSpeed * deltaTime, 0.f);
-                wait=wait+1;
-                if (wait==gameWidth-1000){
-                    isPlaying=true;
-                }
-            }
-            
-        }
-    
-        // Clear the window
-        window.clear(sf::Color(0, 0, 0));
+	//Quit SDL subsystems
+	SDL_Quit();
+}
 
-        if (isPlaying)
-        {
-            // Draw the paddles and the ball
-           window.draw(leftPaddle);
-	       #ifdef drawall
-           window.draw(rightPaddle);
-	       #endif
-	       if (battle){
-		       window.draw(rightPaddle);
-             	window.draw(battleText);
-		       window.draw(crusor);
+SDL_Surface* loadSurface( std::string path )
+{
+	//Load image at specified path
+	SDL_Surface* loadedSurface = SDL_LoadBMP( path.c_str() );
+	if( loadedSurface == NULL )
+	{
+		printf( "Unable to load image %s! SDL Error: %s\n", path.c_str(), SDL_GetError() );
+	}
 
-	       }
-	       else {
-             window.draw(ball);
-            }
-        }
-        else if (battle)
-        {
-            battleText.setString("im too good for this");
-            // Draw the paddles and the ball
-           window.draw(leftPaddle);
-	       #ifdef drawall
-           window.draw(rightPaddle);
-	       #endif
-	       if (battle){
-		       window.draw(rightPaddle);
-             	window.draw(battleText);
-		       window.draw(crusor);
+	return loadedSurface;
+}
 
-	       }
-	       else {
-             window.draw(ball);
-            }
-        }
-        else
-        {   
-            window.draw(copyright);
-             #ifdef battleTest
-            window.draw(battleText);
-            #endif
-            #ifndef battleTest
-            // Draw the pause message
-            window.draw(pauseMessage);
-            #endif
-        }
 
-        // Display things on screen
-        window.display();
-    }
-    std::cout << "Exiting" << std::endl;
-    return EXIT_SUCCESS;
+int main( int argc, char* args[] )
+{
+    int x=0;
+    int y=0;
+	//Start up SDL and create window
+	if( !init() )
+	{
+		printf( "Failed to initialize!\n" );
+	}
+	else
+	{
+		//Load media
+		if( !loadMedia() )
+		{
+			printf( "Failed to load media!\n" );
+		}
+		else
+		{	
+			//Main loop flag
+			bool quit = false;
+
+			//Event handler
+			SDL_Event e;
+
+			//Set default current surface
+			gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_DEFAULT ];
+
+			//While application is running
+			while( !quit )
+			{
+				//Handle events on queue
+				while( SDL_PollEvent( &e ) != 0 )
+				{
+					//User requests quit
+					if( e.type == SDL_QUIT )
+					{
+						quit = true;
+					}
+					//User presses a key
+					else if( e.type == SDL_KEYDOWN )
+					{
+						//Select surfaces based on key press
+						switch( e.key.keysym.sym )
+						{
+							case SDLK_UP:
+							gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_UP ];
+                            y+=1;
+							break;
+
+							case SDLK_DOWN:
+							gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_DOWN ];
+                            y-=1;
+							break;
+
+							case SDLK_LEFT:
+							gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_LEFT ];
+							break;
+
+							case SDLK_RIGHT:
+							gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_RIGHT ];
+							break;
+
+							default:
+							gCurrentSurface = gKeyPressSurfaces[ KEY_PRESS_SURFACE_DEFAULT ];
+							break;
+						}
+					}
+				}
+
+				//Apply the current image
+				SDL_BlitSurface( gCurrentSurface, NULL, gScreenSurface, NULL );
+			
+				//Update the surface
+				SDL_UpdateWindowSurface( gWindow );
+			}
+		}
+	}
+
+	//Free resources and close SDL
+	close();
+
+	return 0;
 }
