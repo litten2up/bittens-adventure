@@ -27,6 +27,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <string>
 #include "bittendef.h"
+#include <iostream>
 //Screen dimension constants
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
@@ -68,8 +69,11 @@ SDL_Surface* gCurrentSurface = NULL;
 
 bool init()
 {
+	debugsettings debug;
 	//Initialization flag
 	bool success = true;
+	std::cout << "Version " << version << "\n" << debug.codename;
+	printf("\n");
 
 	//Initialize SDL
 	if( SDL_Init( SDL_INIT_VIDEO ) < 0 )

@@ -17,5 +17,6 @@ class debugsettings{
         bool noclip=false; // tbh everything is noclip when adding this it is for the future
         bool battletest=false; // replases #define battleTest
         std::string codename = "iced bitten"; // used for eastereggs when i add them
+        double version=0.1;
 };
 #endif
