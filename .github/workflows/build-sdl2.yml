@@ -1,4 +1,4 @@
-name: build
+name: build sdl2
 
 on:
   push:
@@ -31,4 +31,3 @@ jobs:
           bin/
           assets
         if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
-
