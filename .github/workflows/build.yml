@@ -13,8 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: sfml
-      run: sudo apt update; sudo apt install libsfml-dev
+    - name: sdl2
+      run: sudo apt update; sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-gfx-dev
     - name: make
       run: make
     - name: install mingw
